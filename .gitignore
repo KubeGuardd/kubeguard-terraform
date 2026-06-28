@@ -1,0 +1,112 @@
+# ============================================================
+# KubeGuard Terraform .gitignore
+# ============================================================
+
+# ────────────────────────────────────────
+# Terraform Core
+# ────────────────────────────────────────
+
+# Local .terraform directory (downloaded providers & modules)
+**/.terraform/
+
+# Terraform lock file is KEPT (commit this — it pins provider versions)
+# !.terraform.lock.hcl
+
+# State files — NEVER commit state (contains secrets & resource IDs)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Plan files — contain sensitive data, passed via artifacts in pipeline
+*.tfplan
+tfplan-dev
+tfplan-prod
+
+# Crash log
+crash.log
+crash.*.log
+
+# Terraform variable files that may contain secrets
+# Keep terraform-dev.tfvars and terraform-prod.tfvars ONLY if they have no secrets
+# If passwords are in tfvars, uncomment the lines below:
+# terraform-dev.tfvars
+# terraform-prod.tfvars
+
+# Override files (local developer overrides — never share these)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ────────────────────────────────────────
+# Sensitive / Secret Files
+# ────────────────────────────────────────
+
+# Any local secrets or credential files
+*.pem
+*.key
+*.pfx
+*.p12
+secrets.tf
+secrets.tfvars
+*.secret.tfvars
+local.tfvars
+local.auto.tfvars
+
+# Azure CLI credentials cache (if accidentally present)
+.azure/
+
+# ────────────────────────────────────────
+# Pipeline Artifacts (local copies)
+# ────────────────────────────────────────
+
+plan-dev-output.txt
+plan-prod-output.txt
+apply-dev-output.txt
+apply-prod-output.txt
+
+# ────────────────────────────────────────
+# OS Files
+# ────────────────────────────────────────
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ────────────────────────────────────────
+# IDE / Editor
+# ────────────────────────────────────────
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains (IntelliJ, Rider, etc.)
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+
+# ────────────────────────────────────────
+# DO NOT IGNORE (keep these in git)
+# ────────────────────────────────────────
+
+# Provider lock file — always commit this
+# .terraform.lock.hcl  ← do not add this to gitignore
+
+# tfvars files are kept IF they contain no hardcoded secrets
+# Your setup uses variables for passwords so these are safe to commit
+# terraform-dev.tfvars
+# terraform-prod.tfvars

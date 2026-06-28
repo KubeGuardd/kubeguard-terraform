@@ -1,0 +1,340 @@
+# ============================================================
+# KubeGuard Terraform Pipeline
+# ============================================================
+# FLOW:
+#
+# [Push to dev]
+#   -> job: dev-scan-validate-plan
+#      tfsec scan -> fmt check -> init (dev key) -> validate -> plan (dev tfvars)
+#      Plan posted to GitHub Job Summary
+#      WAITS here - no apply on dev push
+#
+# [PR opened: dev -> main]
+#   -> Plan output is already visible in Job Summary from above
+#      No new jobs trigger on PR open
+#
+# [PR merged into main]
+#   -> job: dev-apply
+#      init (dev key) -> apply (dev tfvars) -> post result to summary
+#   -> job: prod-plan (needs: dev-apply)
+#      init (prod key) -> plan (prod tfvars) -> summary -> artifact
+#   -> job: prod-apply (needs: prod-plan, environment: prod)
+#      PAUSES for manual approval from GitHub Environment reviewer
+#      On approval: init (prod key) -> apply saved tfplan-prod artifact
+# ============================================================
+
+name: Terraform Apply
+
+on:
+  push:
+    branches: [dev, main]
+    paths: ["terraform/**"]
+  pull_request:
+    branches: [main]
+    paths: ["terraform/**"]
+
+jobs:
+  dev-scan-validate-plan:
+    name: Dev Scan, Validate, and Plan
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # soft_fail is intentional during dev iteration. Review HIGH/CRITICAL findings
+      # before prod; findings remain visible without blocking every dev delivery.
+      - name: tfsec Security Scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          soft_fail: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Format Check
+        working-directory: terraform
+        shell: bash
+        run: |
+          if ! terraform fmt -check -recursive; then
+            echo "Run \`terraform fmt -recursive\` locally and push again." >&2
+            exit 1
+          fi
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config="key=dev/kubeguard.terraform.tfstate"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        working-directory: terraform
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform plan \
+            -var-file="terraform-dev.tfvars" \
+            -out=tfplan-dev \
+            -input=false \
+            -no-color 2>&1 | tee plan-dev-output.txt
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Post Plan to Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Terraform Dev Plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f terraform/plan-dev-output.txt ]]; then
+            cat terraform/plan-dev-output.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Terraform did not produce a plan output file." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Dev Plan Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-dev
+          path: terraform/tfplan-dev
+          retention-days: 5
+
+  dev-apply:
+    name: Apply Dev
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config="key=dev/kubeguard.terraform.tfstate"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Terraform Apply (Dev)
+        id: dev-apply
+        working-directory: terraform
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform apply \
+            -var-file="terraform-dev.tfvars" \
+            -auto-approve \
+            -input=false \
+            -no-color 2>&1 | tee apply-dev-output.txt
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Post Apply to Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Terraform Dev Apply Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f terraform/apply-dev-output.txt ]]; then
+            cat terraform/apply-dev-output.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Terraform did not produce apply output." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  prod-plan:
+    name: Plan Prod
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: dev-apply
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config="key=prod/kubeguard.terraform.tfstate"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Terraform Plan (Prod)
+        working-directory: terraform
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform plan \
+            -var-file="terraform-prod.tfvars" \
+            -out=tfplan-prod \
+            -input=false \
+            -no-color 2>&1 | tee plan-prod-output.txt
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Post Prod Plan to Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Terraform Prod Plan - Awaiting Approval" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f terraform/plan-prod-output.txt ]]; then
+            cat terraform/plan-prod-output.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Terraform did not produce a plan output file." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Prod Plan Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-prod
+          path: terraform/tfplan-prod
+          retention-days: 5
+
+  prod-apply:
+    name: Apply Prod
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: prod-plan
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config="key=prod/kubeguard.terraform.tfstate"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Download Prod Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-prod
+          path: terraform/
+
+      - name: Terraform Apply (Prod)
+        id: prod-apply
+        working-directory: terraform
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            -no-color \
+            tfplan-prod 2>&1 | tee apply-prod-output.txt
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+
+      - name: Post Prod Apply to Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Terraform Prod Apply Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f terraform/apply-prod-output.txt ]]; then
+            cat terraform/apply-prod-output.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Terraform did not produce apply output." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
