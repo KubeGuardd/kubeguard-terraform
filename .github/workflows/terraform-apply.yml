@@ -43,12 +43,13 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: tfsec Security Scan
-        uses: aquasecurity/tfsec-action@v1.0.3
+      - name: Trivy Terraform Security Scan
+        uses: aquasecurity/trivy-action@master
         with:
-          working_directory: .
-          soft_fail: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          scan-type: config
+          scan-ref: .
+          format: table
+          exit-code: 0
 
       - name: Terraform Format Check
         working-directory: .
