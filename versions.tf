@@ -3,8 +3,8 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "kubeguard-rg"
-    storage_account_name = "kubeguardstg"
-    container_name       = "tfstate"
+    storage_account_name = "kubeguardprodstg"
+    container_name       = "statefiles"
     use_oidc             = true
     use_azuread_auth     = true
   }
