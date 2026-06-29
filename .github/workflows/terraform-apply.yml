@@ -1,28 +1,3 @@
-# ============================================================
-# KubeGuard Terraform Pipeline
-# ============================================================
-# FLOW:
-#
-# [Push to dev]
-#   -> job: dev-scan-validate-plan
-#      tfsec scan -> fmt check -> init (dev key) -> validate -> plan (dev tfvars)
-#      Plan posted to GitHub Job Summary
-#      WAITS here - no apply on dev push
-#
-# [PR opened: dev -> main]
-#   -> Plan output is already visible in Job Summary from above
-#      No new jobs trigger on PR open
-#
-# [PR merged into main]
-#   -> job: dev-apply
-#      init (dev key) -> apply (dev tfvars) -> post result to summary
-#   -> job: prod-plan (needs: dev-apply)
-#      init (prod key) -> plan (prod tfvars) -> summary -> artifact
-#   -> job: prod-apply (needs: prod-plan, environment: prod)
-#      PAUSES for manual approval from GitHub Environment reviewer
-#      On approval: init (prod key) -> apply saved tfplan-prod artifact
-# ============================================================
-
 name: Terraform Apply
 
 on:
@@ -60,8 +35,6 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # soft_fail is intentional during dev iteration. Review HIGH/CRITICAL findings
-      # before prod; findings remain visible without blocking every dev delivery.
       - name: tfsec Security Scan
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
