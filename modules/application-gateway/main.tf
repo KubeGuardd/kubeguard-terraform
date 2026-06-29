@@ -91,8 +91,8 @@ resource "azurerm_application_gateway" "this" {
   }
 
   ssl_policy {
-  policy_type = "Predefined"
-  policy_name = "AppGwSslPolicy20220101"
+    policy_type = "Predefined"
+    policy_name = "AppGwSslPolicy20220101"
   }
 
   depends_on = [

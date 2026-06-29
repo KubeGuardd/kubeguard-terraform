@@ -8,10 +8,10 @@ resource "azurerm_virtual_network" "this" {
 resource "azurerm_subnet" "this" {
   for_each = { for subnet in var.subnets : subnet.name => subnet }
 
-  name                                      = each.value.name
-  resource_group_name                       = var.resource_group_name
-  virtual_network_name                      = azurerm_virtual_network.this.name
-  address_prefixes                          = [each.value.prefix]
+  name                              = each.value.name
+  resource_group_name               = var.resource_group_name
+  virtual_network_name              = azurerm_virtual_network.this.name
+  address_prefixes                  = [each.value.prefix]
   private_endpoint_network_policies = each.value.enable_private_endpoint_network_policies == false ? "Disabled" : "Enabled"
 
   depends_on = [azurerm_virtual_network.this]

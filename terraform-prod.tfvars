@@ -34,8 +34,8 @@ aks_node_count_min     = 2
 aks_node_count_max     = 3
 aks_vm_size            = "Standard_D2s_v3"
 aks_availability_zones = ["2"]
-aks_service_cidr   = "10.240.0.0/16"
-aks_dns_service_ip = "10.240.0.10"
+aks_service_cidr       = "10.240.0.0/16"
+aks_dns_service_ip     = "10.240.0.10"
 aks_identity_name      = "kubeguard-prod-aks-id"
 
 vm_name              = "kubeguard-prod-vm"
