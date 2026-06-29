@@ -12,7 +12,7 @@ resource "azurerm_subnet" "this" {
   resource_group_name                       = var.resource_group_name
   virtual_network_name                      = azurerm_virtual_network.this.name
   address_prefixes                          = [each.value.prefix]
-  private_endpoint_network_policies_enabled = each.value.enable_private_endpoint_network_policies
+  private_endpoint_network_policies = each.value.enable_private_endpoint_network_policies == false ? "Disabled" : "Enabled"
 
   depends_on = [azurerm_virtual_network.this]
 }

@@ -33,19 +33,19 @@ aks_node_pool_name     = "systempool"
 aks_node_count_min     = 2
 aks_node_count_max     = 3
 aks_vm_size            = "Standard_D2s_v3"
-aks_availability_zones = ["1"]
+aks_availability_zones = ["2"]
 aks_service_cidr       = "172.20.0.0/16"
 aks_dns_service_ip     = "172.20.0.10"
 aks_identity_name      = "kubeguard-aks-identity"
 
 vm_name              = "kubeguard-vm"
-vm_size              = "Standard_B2s"
+vm_size              = "Standard_B2ms"
 vm_admin_username    = "surya"
 vm_admin_password    = "Password@123"
 vm_os_disk_name      = "kubeguard-vm-osdisk"
 vm_nic_name          = "kubeguard-vm-nic"
 vm_nsg_name          = "kubeguard-vm-nsg"
-vm_availability_zone = "1"
+vm_availability_zone = "2"
 
 cosmosdb_account_name   = "kubeguard-mongodbapps"
 cosmosdb_mongo_version  = "4.2"

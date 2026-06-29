@@ -30,22 +30,22 @@ acr_sku  = "Premium"
 
 aks_cluster_name       = "kubeguard-prod-cluster"
 aks_node_pool_name     = "systempool"
-aks_node_count_min     = 3
-aks_node_count_max     = 6
-aks_vm_size            = "Standard_D4s_v3"
-aks_availability_zones = ["1", "2", "3"]
-aks_service_cidr       = "172.30.0.0/16"
-aks_dns_service_ip     = "172.30.0.10"
+aks_node_count_min     = 2
+aks_node_count_max     = 3
+aks_vm_size            = "Standard_D2s_v3"
+aks_availability_zones = ["2"]
+aks_service_cidr   = "10.240.0.0/16"
+aks_dns_service_ip = "10.240.0.10"
 aks_identity_name      = "kubeguard-prod-aks-id"
 
 vm_name              = "kubeguard-prod-vm"
-vm_size              = "Standard_D2s_v3"
+vm_size              = "Standard_D2as_v4"
 vm_admin_username    = "surya"
 vm_admin_password    = "ReplaceWithSecureProdPassword@123"
 vm_os_disk_name      = "kubeguard-prod-vm-osdisk"
 vm_nic_name          = "kubeguard-prod-vm-nic"
 vm_nsg_name          = "kubeguard-prod-vm-nsg"
-vm_availability_zone = "1"
+vm_availability_zone = "2"
 
 cosmosdb_account_name   = "kubeguard-prod-mongo"
 cosmosdb_mongo_version  = "4.2"

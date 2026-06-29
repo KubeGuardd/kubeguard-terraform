@@ -90,6 +90,11 @@ resource "azurerm_application_gateway" "this" {
     priority                   = 100
   }
 
+  ssl_policy {
+  policy_type = "Predefined"
+  policy_name = "AppGwSslPolicy20220101"
+  }
+
   depends_on = [
     azurerm_public_ip.this,
     azurerm_web_application_firewall_policy.this
