@@ -3,10 +3,18 @@ name: Terraform Apply
 on:   
   push:
     branches: [dev, main]
-    paths: ["terraform/**"]
+    paths:
+      - "**.tf"
+      - "**.tfvars"
+      - ".github/workflows/**"
+      - "modules/**"
   pull_request:
     branches: [main]
-    paths: ["terraform/**"]
+    paths:
+      - "**.tf"
+      - "**.tfvars"
+      - ".github/workflows/**"
+      - "modules/**"
 
 jobs:
   dev-scan-validate-plan:
@@ -38,12 +46,12 @@ jobs:
       - name: tfsec Security Scan
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          working_directory: terraform
+          working_directory: .
           soft_fail: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Terraform Format Check
-        working-directory: terraform
+        working-directory: .
         shell: bash
         run: |
           if ! terraform fmt -check -recursive; then
@@ -52,7 +60,7 @@ jobs:
           fi
 
       - name: Terraform Init
-        working-directory: terraform
+        working-directory: .
         run: terraform init -input=false -backend-config="key=dev/kubeguard.terraform.tfstate"
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -61,11 +69,11 @@ jobs:
           ARM_USE_OIDC: true
 
       - name: Terraform Validate
-        working-directory: terraform
+        working-directory: .
         run: terraform validate -no-color
 
       - name: Terraform Plan
-        working-directory: terraform
+        working-directory: .
         shell: bash
         run: |
           set -o pipefail
@@ -87,8 +95,8 @@ jobs:
           echo "## Terraform Dev Plan" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f terraform/plan-dev-output.txt ]]; then
-            cat terraform/plan-dev-output.txt >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f plan-dev-output.txt ]]; then
+            cat plan-dev-output.txt >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Terraform did not produce a plan output file." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -99,12 +107,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-dev
-          path: terraform/tfplan-dev
+          path: tfplan-dev
           retention-days: 5
 
   dev-apply:
     name: Apply Dev
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -127,7 +135,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Terraform Init
-        working-directory: terraform
+        working-directory: .
         run: terraform init -input=false -backend-config="key=dev/kubeguard.terraform.tfstate"
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -137,7 +145,7 @@ jobs:
 
       - name: Terraform Apply (Dev)
         id: dev-apply
-        working-directory: terraform
+        working-directory: .
         shell: bash
         run: |
           set -o pipefail
@@ -159,8 +167,8 @@ jobs:
           echo "## Terraform Dev Apply Result" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f terraform/apply-dev-output.txt ]]; then
-            cat terraform/apply-dev-output.txt >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f apply-dev-output.txt ]]; then
+            cat apply-dev-output.txt >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Terraform did not produce apply output." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -169,7 +177,6 @@ jobs:
   prod-plan:
     name: Plan Prod
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: dev-apply
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -193,7 +200,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Terraform Init
-        working-directory: terraform
+        working-directory: .
         run: terraform init -input=false -backend-config="key=prod/kubeguard.terraform.tfstate"
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -202,7 +209,7 @@ jobs:
           ARM_USE_OIDC: true
 
       - name: Terraform Plan (Prod)
-        working-directory: terraform
+        working-directory: .
         shell: bash
         run: |
           set -o pipefail
@@ -224,8 +231,8 @@ jobs:
           echo "## Terraform Prod Plan - Awaiting Approval" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f terraform/plan-prod-output.txt ]]; then
-            cat terraform/plan-prod-output.txt >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f plan-prod-output.txt ]]; then
+            cat plan-prod-output.txt >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Terraform did not produce a plan output file." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -236,7 +243,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-prod
-          path: terraform/tfplan-prod
+          path: tfplan-prod
           retention-days: 5
 
   prod-apply:
@@ -267,7 +274,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Terraform Init
-        working-directory: terraform
+        working-directory: .
         run: terraform init -input=false -backend-config="key=prod/kubeguard.terraform.tfstate"
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -279,11 +286,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tfplan-prod
-          path: terraform/
+          path: .
 
       - name: Terraform Apply (Prod)
         id: prod-apply
-        working-directory: terraform
+        working-directory: .
         shell: bash
         run: |
           set -o pipefail
@@ -305,8 +312,8 @@ jobs:
           echo "## Terraform Prod Apply Result" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f terraform/apply-prod-output.txt ]]; then
-            cat terraform/apply-prod-output.txt >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f apply-prod-output.txt ]]; then
+            cat apply-prod-output.txt >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Terraform did not produce apply output." >> "$GITHUB_STEP_SUMMARY"
           fi
