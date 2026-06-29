@@ -1,4 +1,4 @@
-output "aks_id" {
+output "aks_id" {  
   description = "AKS cluster resource ID."
   value       = azurerm_kubernetes_cluster.this.id
 }
